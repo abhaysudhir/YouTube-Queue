@@ -6,8 +6,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Get all tabs in the current window
   const tabs = await chrome.tabs.query({ currentWindow: true });
   
+  // Filter for only YouTube tabs
+  const youtubeTabs = tabs.filter(tab => 
+    tab.url.includes('youtube.com') || tab.url.includes('youtu.be')
+  );
+  
+  if (youtubeTabs.length === 0) {
+    tabsList.innerHTML = '<div class="no-tabs">No YouTube tabs found</div>';
+    return;
+  }
+  
   // Create and display tab elements
-  tabs.forEach(tab => {
+  youtubeTabs.forEach(tab => {
     const tabElement = document.createElement('div');
     tabElement.className = 'tab-item';
     tabElement.innerHTML = `

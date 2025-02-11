@@ -7,6 +7,18 @@
     "tabs"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icons8-youtube-16.png",
+      "48": "icons/icons8-youtube-48.png",
+      "96": "icons/icons8-youtube-96.png",
+      "144": "icons/icons8-youtube-144.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icons8-youtube-16.png",
+    "48": "icons/icons8-youtube-48.png",
+    "96": "icons/icons8-youtube-96.png",
+    "144": "icons/icons8-youtube-144.png"
   }
 } 

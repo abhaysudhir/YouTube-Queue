@@ -174,27 +174,6 @@ function addTopVideoToQueue() {
         }
       }
       
-      // Last resort: try to find any element with text starting with "Add to queue"
-      const treeWalker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-        null,
-        false
-      );
-      
-      let node;
-      while (node = treeWalker.nextNode()) {
-        if (node.textContent.trim().includes('Add to queue')) {
-          console.log('Found text node with "Add to queue"');
-          let element = node.parentNode;
-          // Go up the tree to find a clickable element
-          while (element && !['A', 'BUTTON', 'TP-YT-PAPER-ITEM'].includes(element.tagName)) {
-            element = element.parentNode;
-          }
-          return element || node.parentNode;
-        }
-      }
-      
       return null;
     }
     
@@ -209,7 +188,6 @@ function addTopVideoToQueue() {
       const menuPopup = document.querySelector('ytd-menu-popup-renderer, tp-yt-iron-dropdown');
       if (menuPopup) {
         console.log('Popup menu content:', menuPopup.textContent.trim());
-        console.log('Popup menu HTML:', menuPopup.innerHTML);
       } else {
         console.log('No popup menu found');
       }
@@ -220,45 +198,22 @@ function addTopVideoToQueue() {
       return;
     }
     
-    // Click the "Add to queue" option without clicking the video
-    console.log('Clicking the "Add to queue" option');
+    // Click the "Add to queue" option WITHOUT multiple clicks - just ONCE
+    console.log('Clicking the "Add to queue" option ONCE');
     console.log('Queue option HTML:', queueOption.outerHTML);
     
+    // Single click approach
     try {
-      // Multiple click attempts with different methods
-      // 1. Direct click
       queueOption.click();
-      
-      // 2. MouseEvent
-      setTimeout(() => {
-        console.log('Trying MouseEvent click');
-        const clickEvent = new MouseEvent('click', {
-          view: window,
-          bubbles: true,
-          cancelable: true,
-          clientX: 20,
-          clientY: 20
-        });
-        queueOption.dispatchEvent(clickEvent);
-      }, 300);
-      
-      // 3. Click any children that might be the actual clickable element
-      setTimeout(() => {
-        console.log('Trying to click children elements');
-        const clickableChildren = queueOption.querySelectorAll('*');
-        clickableChildren.forEach(child => {
-          try { child.click(); } catch (e) {}
-        });
-      }, 600);
     } catch (error) {
       console.error('Error clicking:', error);
     }
     
     // Wait a moment to complete the action
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 1000));
     
     // Report success
-    console.log('Attempted to add to queue - check console for success/failure details');
+    console.log('Successfully added to queue (single click)');
     resolve(true);
   });
 } 

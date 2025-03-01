@@ -24,7 +24,7 @@ function addTopVideoToQueue() {
   return new Promise(async (resolve) => {
     console.log('Looking for the top video menu button');
     
-    // Different selectors to find video menu buttons on different YouTube page types
+    // Different selectors to find video containers on different YouTube page types
     const videoContainerSelectors = [
       // Homepage videos
       'ytd-rich-grid-media',
@@ -55,38 +55,59 @@ function addTopVideoToQueue() {
       return;
     }
     
-    // Find the three dots menu button within the container
-    // Different possible selectors for the menu button
-    const menuButtonSelectors = [
-      // Look for button with "More" in aria-label or text
-      'button[aria-label*="More"], button[aria-label*="more"], yt-icon-button[aria-label*="Action"], button.yt-icon-button[aria-label*="actions"]',
-      // Menu button that often appears on hover
-      'ytd-menu-renderer button, .ytd-menu-renderer button, .dropdown-trigger',
-      // Three dots icon inside video containers
-      'yt-icon-button.ytd-menu-renderer, .ytd-thumbnail-overlay-toggle-button-renderer'
-    ];
+    // Find the exact 3-dot menu button with specific SVG pattern
+    console.log('Looking for the exact 3-dot menu button');
     
-    for (const selector of menuButtonSelectors) {
-      const buttons = videoContainer.querySelectorAll(selector);
-      if (buttons.length > 0) {
-        menuButton = buttons[0];
-        console.log(`Found menu button with selector: ${selector}`);
+    // Function to check if an element has the vertical 3-dot menu SVG
+    function hasThreeDotsVerticalSVG(element) {
+      const svgContent = element.innerHTML || '';
+      // Check for the unique SVG path of the 3-dot menu
+      return svgContent.includes('M12 16.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5-1.5') || // Exact pattern from user
+             svgContent.includes('M10.5 12c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5') || // Another part of the pattern
+             (svgContent.includes('viewBox="0 0 24 24"') && // Generic 3-dot menu detection
+              svgContent.match(/circle|dot|ellipsis|more/i) &&
+              !svgContent.includes('path d="M21 16h-7') && // Exclude other menu icons
+              !svgContent.includes('path d="M14.97 16.95')); // Exclude other icons
+    }
+    
+    // First: Look for the exact SVG pattern in the video container
+    const iconShapes = videoContainer.querySelectorAll('.yt-icon-shape, yt-icon, svg');
+    for (const shape of iconShapes) {
+      if (hasThreeDotsVerticalSVG(shape)) {
+        console.log('Found 3-dot menu by SVG pattern');
+        // Get the button containing this icon
+        menuButton = shape.closest('button') || 
+                     shape.closest('yt-icon-button') || 
+                     shape.closest('[role="button"]') ||
+                     shape;
         break;
       }
     }
     
-    // If still not found, try a more general approach
+    // Second: Look within menu renderer for any button-like element
     if (!menuButton) {
-      // Get all buttons that might be menu buttons
-      const allButtons = document.querySelectorAll('button, yt-icon-button');
-      
+      const menuRenderers = videoContainer.querySelectorAll('ytd-menu-renderer, [id*="menu"], [class*="menu"]');
+      for (const menu of menuRenderers) {
+        const potentialButtons = menu.querySelectorAll('button, yt-icon-button, [role="button"]');
+        for (const btn of potentialButtons) {
+          if (btn.querySelector('.yt-icon-shape, yt-icon, svg')) {
+            console.log('Found potential menu button in menu renderer');
+            menuButton = btn;
+            break;
+          }
+        }
+        if (menuButton) break;
+      }
+    }
+    
+    // Third: Look for specific aria-labels
+    if (!menuButton) {
+      const allButtons = videoContainer.querySelectorAll('button, yt-icon-button, [role="button"]');
       for (const btn of allButtons) {
-        const label = btn.getAttribute('aria-label') || '';
-        if (label.toLowerCase().includes('action') || 
-            label.toLowerCase().includes('more') || 
-            label.toLowerCase().includes('menu')) {
+        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+        if (label.includes('action') || label.includes('menu') || label.includes('more')) {
+          console.log('Found menu button through aria-label:', label);
           menuButton = btn;
-          console.log('Found menu button through aria-label search');
           break;
         }
       }
@@ -98,122 +119,146 @@ function addTopVideoToQueue() {
       return;
     }
     
-    // Click the menu button
-    console.log('Clicking the menu button');
+    // DEBUG: Log the HTML of the menu button for verification
+    console.log('Menu button HTML:', menuButton.outerHTML);
+    
+    // ONLY click the menu button - avoid the video itself
+    console.log('Clicking ONLY the menu button');
     menuButton.click();
     
-    // Wait for the menu to appear
-    await new Promise(r => setTimeout(r, 1500)); // Increased delay even more
+    // Wait longer for the menu to appear to ensure it's fully loaded
+    await new Promise(r => setTimeout(r, 2500)); // Extended wait time
     
     // Look for "Add to queue" option in the menu using the exact HTML structure
     console.log('Looking for "Add to queue" option');
     
-    // Direct targeting based on the provided HTML structure
+    // Direct targeting of the "Add to queue" option
     function findAddToQueueOption() {
-      // First option: Find the first menu service item in the dropdown
-      // The "Add to queue" option is typically the first item in the dropdown menu
-      const contentWrapper = document.getElementById('contentWrapper');
-      if (contentWrapper) {
-        console.log('Found contentWrapper');
-        const firstMenuItem = contentWrapper.querySelector('ytd-menu-service-item-renderer');
-        if (firstMenuItem) {
-          console.log('Found first menu item in the dropdown');
-          return firstMenuItem.querySelector('tp-yt-paper-item');
-        }
-      }
+      // Find all paper-items in the dropdown menu
+      const paperItems = document.querySelectorAll('tp-yt-paper-item');
+      console.log(`Found ${paperItems.length} paper items`);
       
-      // Second option: Look for the exact item with text content "Add to queue"
-      const queueItems = document.querySelectorAll('ytd-menu-service-item-renderer');
-      for (const item of queueItems) {
+      // First approach: direct search for the menu item with the exact text
+      for (const item of paperItems) {
         const text = item.textContent.trim();
         if (text.includes('Add to queue')) {
-          console.log('Found "Add to queue" item by text content');
-          return item.querySelector('tp-yt-paper-item');
+          console.log('Found "Add to queue" by text content in paper-item');
+          return item;
         }
       }
       
-      // Third option: Find by the exact formatted string
+      // Second approach: check specifically inside menu service items
+      const menuItems = document.querySelectorAll('ytd-menu-service-item-renderer');
+      for (const item of menuItems) {
+        const text = item.textContent.trim();
+        if (text.includes('Add to queue')) {
+          console.log('Found "Add to queue" in menu service item');
+          const paperItem = item.querySelector('tp-yt-paper-item');
+          if (paperItem) {
+            return paperItem;
+          }
+          return item; // If paper-item not found, return the service item itself
+        }
+      }
+      
+      // Third approach: look for the formatted string
       const formattedStrings = document.querySelectorAll('yt-formatted-string');
       for (const str of formattedStrings) {
         if (str.textContent.trim() === 'Add to queue') {
-          console.log('Found the exact text "Add to queue"');
-          // Go up to the paper-item
-          return str.closest('tp-yt-paper-item');
+          console.log('Found exact "Add to queue" text');
+          // Return the closest clickable ancestor
+          return str.closest('tp-yt-paper-item') || 
+                 str.closest('ytd-menu-service-item-renderer') || 
+                 str.closest('button') || 
+                 str.parentElement;
         }
       }
       
-      // Fourth option: Find by the paper-listbox and then the first item
-      const paperListbox = document.querySelector('tp-yt-paper-listbox#items');
-      if (paperListbox) {
-        console.log('Found paper-listbox');
-        const firstItem = paperListbox.querySelector('ytd-menu-service-item-renderer');
-        if (firstItem) {
-          console.log('Found first item in paper-listbox');
-          return firstItem.querySelector('tp-yt-paper-item');
-        }
-      }
-
-      // Fifth option: Direct querySelector for the structure
-      const directItem = document.querySelector('ytd-menu-popup-renderer tp-yt-paper-listbox ytd-menu-service-item-renderer.iron-selected tp-yt-paper-item');
-      if (directItem) {
-        console.log('Found direct match for the menu item structure');
-        return directItem;
-      }
+      // Last resort: try to find any element with text starting with "Add to queue"
+      const treeWalker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
       
-      // If all else fails, try to find any paper-item with the right icon and text
-      const allPaperItems = document.querySelectorAll('tp-yt-paper-item');
-      for (const item of allPaperItems) {
-        if (item.textContent.trim().includes('Add to queue')) {
-          console.log('Found "Add to queue" in paper-item');
-          return item;
+      let node;
+      while (node = treeWalker.nextNode()) {
+        if (node.textContent.trim().includes('Add to queue')) {
+          console.log('Found text node with "Add to queue"');
+          let element = node.parentNode;
+          // Go up the tree to find a clickable element
+          while (element && !['A', 'BUTTON', 'TP-YT-PAPER-ITEM'].includes(element.tagName)) {
+            element = element.parentNode;
+          }
+          return element || node.parentNode;
         }
       }
       
       return null;
     }
     
-    // Try to find the right option and click it after a sufficient delay
-    await new Promise(r => setTimeout(r, 500)); // Extra delay to make sure menu is fully rendered
-    
+    // Try to find the "Add to queue" option
     const queueOption = findAddToQueueOption();
     
     if (!queueOption) {
       console.log('Could not find the "Add to queue" option');
-      // Print all menu items for debugging
-      console.log('Available menu items:');
-      const allItems = document.querySelectorAll('ytd-menu-service-item-renderer');
-      allItems.forEach((item, index) => {
-        console.log(`Menu item ${index}: ${item.textContent.trim()}`);
-      });
       
-      // Click somewhere else to close the menu
+      // Debug: Try to list all text in the popup menu to help diagnose
+      console.log('Dumping all visible menu text:');
+      const menuPopup = document.querySelector('ytd-menu-popup-renderer, tp-yt-iron-dropdown');
+      if (menuPopup) {
+        console.log('Popup menu content:', menuPopup.textContent.trim());
+        console.log('Popup menu HTML:', menuPopup.innerHTML);
+      } else {
+        console.log('No popup menu found');
+      }
+      
+      // Close the menu by clicking elsewhere
       document.body.click();
       resolve(false);
       return;
     }
     
-    // Click the "Add to queue" option
+    // Click the "Add to queue" option without clicking the video
     console.log('Clicking the "Add to queue" option');
+    console.log('Queue option HTML:', queueOption.outerHTML);
+    
     try {
-      // Try several clicking methods to ensure one works
+      // Multiple click attempts with different methods
+      // 1. Direct click
       queueOption.click();
       
-      // If normal click doesn't work, try dispatching a mouse event
+      // 2. MouseEvent
       setTimeout(() => {
-        console.log('Trying MouseEvent click as fallback');
+        console.log('Trying MouseEvent click');
         const clickEvent = new MouseEvent('click', {
           view: window,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
+          clientX: 20,
+          clientY: 20
         });
         queueOption.dispatchEvent(clickEvent);
       }, 300);
+      
+      // 3. Click any children that might be the actual clickable element
+      setTimeout(() => {
+        console.log('Trying to click children elements');
+        const clickableChildren = queueOption.querySelectorAll('*');
+        clickableChildren.forEach(child => {
+          try { child.click(); } catch (e) {}
+        });
+      }, 600);
     } catch (error) {
       console.error('Error clicking:', error);
     }
     
+    // Wait a moment to complete the action
+    await new Promise(r => setTimeout(r, 1500));
+    
     // Report success
-    console.log('Successfully added to queue');
+    console.log('Attempted to add to queue - check console for success/failure details');
     resolve(true);
   });
 } 

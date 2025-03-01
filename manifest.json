@@ -1,13 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Video Opener",
+  "name": "YouTube Top Video Clicker",
   "version": "1.0",
-  "description": "Opens a specific YouTube video when clicked",
+  "description": "Clicks the top video on a YouTube page",
   "permissions": [
-    "tabs"
+    "activeTab",
+    "scripting"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icons8-youtube-16.png",
       "48": "icons/icons8-youtube-48.png",

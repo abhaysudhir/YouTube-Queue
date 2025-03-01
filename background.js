@@ -103,51 +103,89 @@ function addTopVideoToQueue() {
     menuButton.click();
     
     // Wait for the menu to appear
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 1500)); // Increased delay even more
     
-    // Look for "Add to queue" option in the menu
+    // Look for "Add to queue" option in the menu using the exact HTML structure
     console.log('Looking for "Add to queue" option');
     
-    const queueOptionSelectors = [
-      // Text-based search in dropdown menu items
-      'ytd-menu-service-item-renderer, tp-yt-paper-item, ytd-menu-navigation-item-renderer',
-      // General dropdown items
-      '.ytd-menu-popup-renderer tp-yt-paper-item, .ytd-menu-popup-renderer ytd-menu-service-item-renderer'
-    ];
-    
-    let queueOption = null;
-    
-    // First try to find the option through selectors
-    for (const selector of queueOptionSelectors) {
-      const options = document.querySelectorAll(selector);
-      for (const option of options) {
-        const text = option.textContent.toLowerCase();
-        if (text.includes('queue') || text.includes('add to queue')) {
-          queueOption = option;
-          console.log(`Found "Add to queue" option with selector: ${selector}`);
-          break;
+    // Direct targeting based on the provided HTML structure
+    function findAddToQueueOption() {
+      // First option: Find the first menu service item in the dropdown
+      // The "Add to queue" option is typically the first item in the dropdown menu
+      const contentWrapper = document.getElementById('contentWrapper');
+      if (contentWrapper) {
+        console.log('Found contentWrapper');
+        const firstMenuItem = contentWrapper.querySelector('ytd-menu-service-item-renderer');
+        if (firstMenuItem) {
+          console.log('Found first menu item in the dropdown');
+          return firstMenuItem.querySelector('tp-yt-paper-item');
         }
       }
-      if (queueOption) break;
-    }
-    
-    // If not found, try a general approach
-    if (!queueOption) {
-      // Get all elements that might be menu items
-      const allItems = document.querySelectorAll('ytd-menu-service-item-renderer, tp-yt-paper-item, ytd-menu-navigation-item-renderer, button');
       
-      for (const item of allItems) {
-        const text = item.textContent.toLowerCase();
-        if (text.includes('queue') || text.includes('add to queue')) {
-          queueOption = item;
-          console.log('Found "Add to queue" option through text content search');
-          break;
+      // Second option: Look for the exact item with text content "Add to queue"
+      const queueItems = document.querySelectorAll('ytd-menu-service-item-renderer');
+      for (const item of queueItems) {
+        const text = item.textContent.trim();
+        if (text.includes('Add to queue')) {
+          console.log('Found "Add to queue" item by text content');
+          return item.querySelector('tp-yt-paper-item');
         }
       }
+      
+      // Third option: Find by the exact formatted string
+      const formattedStrings = document.querySelectorAll('yt-formatted-string');
+      for (const str of formattedStrings) {
+        if (str.textContent.trim() === 'Add to queue') {
+          console.log('Found the exact text "Add to queue"');
+          // Go up to the paper-item
+          return str.closest('tp-yt-paper-item');
+        }
+      }
+      
+      // Fourth option: Find by the paper-listbox and then the first item
+      const paperListbox = document.querySelector('tp-yt-paper-listbox#items');
+      if (paperListbox) {
+        console.log('Found paper-listbox');
+        const firstItem = paperListbox.querySelector('ytd-menu-service-item-renderer');
+        if (firstItem) {
+          console.log('Found first item in paper-listbox');
+          return firstItem.querySelector('tp-yt-paper-item');
+        }
+      }
+
+      // Fifth option: Direct querySelector for the structure
+      const directItem = document.querySelector('ytd-menu-popup-renderer tp-yt-paper-listbox ytd-menu-service-item-renderer.iron-selected tp-yt-paper-item');
+      if (directItem) {
+        console.log('Found direct match for the menu item structure');
+        return directItem;
+      }
+      
+      // If all else fails, try to find any paper-item with the right icon and text
+      const allPaperItems = document.querySelectorAll('tp-yt-paper-item');
+      for (const item of allPaperItems) {
+        if (item.textContent.trim().includes('Add to queue')) {
+          console.log('Found "Add to queue" in paper-item');
+          return item;
+        }
+      }
+      
+      return null;
     }
+    
+    // Try to find the right option and click it after a sufficient delay
+    await new Promise(r => setTimeout(r, 500)); // Extra delay to make sure menu is fully rendered
+    
+    const queueOption = findAddToQueueOption();
     
     if (!queueOption) {
       console.log('Could not find the "Add to queue" option');
+      // Print all menu items for debugging
+      console.log('Available menu items:');
+      const allItems = document.querySelectorAll('ytd-menu-service-item-renderer');
+      allItems.forEach((item, index) => {
+        console.log(`Menu item ${index}: ${item.textContent.trim()}`);
+      });
+      
       // Click somewhere else to close the menu
       document.body.click();
       resolve(false);
@@ -156,7 +194,23 @@ function addTopVideoToQueue() {
     
     // Click the "Add to queue" option
     console.log('Clicking the "Add to queue" option');
-    queueOption.click();
+    try {
+      // Try several clicking methods to ensure one works
+      queueOption.click();
+      
+      // If normal click doesn't work, try dispatching a mouse event
+      setTimeout(() => {
+        console.log('Trying MouseEvent click as fallback');
+        const clickEvent = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        queueOption.dispatchEvent(clickEvent);
+      }, 300);
+    } catch (error) {
+      console.error('Error clicking:', error);
+    }
     
     // Report success
     console.log('Successfully added to queue');

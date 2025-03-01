@@ -1,44 +1,31 @@
-document.addEventListener('DOMContentLoaded', async () => {
-  const tabsList = document.getElementById('tabs-list');
-  const selectedCount = document.getElementById('selected-count');
-  let selectedTabs = new Set();
-
-  // Get all tabs in the current window
-  const tabs = await chrome.tabs.query({ currentWindow: true });
+document.addEventListener('DOMContentLoaded', () => {
+  const openVideoButton = document.getElementById('open-video');
+  const statusElement = document.getElementById('status');
   
-  // Filter for only YouTube tabs
-  const youtubeTabs = tabs.filter(tab => 
-    tab.url.includes('youtube.com') || tab.url.includes('youtu.be')
-  );
+  // The specific YouTube video URL
+  const youtubeVideoUrl = 'https://www.youtube.com/watch?v=W1kE3qA8FcA';
   
-  if (youtubeTabs.length === 0) {
-    tabsList.innerHTML = '<div class="no-tabs">No YouTube tabs found</div>';
-    return;
-  }
-  
-  // Create and display tab elements
-  youtubeTabs.forEach(tab => {
-    const tabElement = document.createElement('div');
-    tabElement.className = 'tab-item';
-    tabElement.innerHTML = `
-      <img src="${tab.favIconUrl || 'chrome://favicon'}" alt="favicon">
-      <span>${tab.title}</span>
-    `;
-    
-    // Add click handler for selection
-    tabElement.addEventListener('click', () => {
-      if (selectedTabs.has(tab.id)) {
-        selectedTabs.delete(tab.id);
-        tabElement.classList.remove('selected');
-      } else {
-        selectedTabs.add(tab.id);
-        tabElement.classList.add('selected');
-      }
+  // Handle the button click
+  openVideoButton.addEventListener('click', async () => {
+    try {
+      // Disable the button while processing
+      openVideoButton.disabled = true;
+      statusElement.textContent = 'Opening video...';
+      statusElement.className = 'status-message pending';
       
-      // Update the counter
-      selectedCount.textContent = selectedTabs.size;
-    });
-    
-    tabsList.appendChild(tabElement);
+      // Open the YouTube video in a new tab
+      const newTab = await chrome.tabs.create({ url: youtubeVideoUrl });
+      
+      // Update status
+      statusElement.textContent = 'Video opened successfully!';
+      statusElement.className = 'status-message success';
+    } catch (error) {
+      // Handle any errors
+      statusElement.textContent = 'Error: ' + error.message;
+      statusElement.className = 'status-message error';
+    } finally {
+      // Re-enable the button
+      openVideoButton.disabled = false;
+    }
   });
 }); 

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Tab Selector Counter",
+  "name": "YouTube Video Opener",
   "version": "1.0",
-  "description": "Select tabs and count them",
+  "description": "Opens a specific YouTube video when clicked",
   "permissions": [
     "tabs"
   ],

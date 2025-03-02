@@ -230,6 +230,9 @@ function addVideoToQueue(videoId) {
           console.error('[Queue Extension] YouTube API returned an error:', response.status, responseData);
         }
         
+        // COMMENTED OUT: These fallback methods weren't needed as the first method was successful
+        
+        /* 
         // If first API attempt failed, try with WEB_EMBEDDED_PLAYER client (ID: 56)
         if (!success) {
           console.log('[Queue Extension] Trying with WEB_EMBEDDED_PLAYER client');
@@ -333,6 +336,7 @@ function addVideoToQueue(videoId) {
             console.error('[Queue Extension] TV player API returned an error:', tvResponse.status, tvResponseData);
           }
         }
+        */
       } catch (apiError) {
         console.error('[Queue Extension] YouTube API error:', apiError);
       }

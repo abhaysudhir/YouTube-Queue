@@ -32,8 +32,8 @@ chrome.action.onClicked.addListener(async (tab) => {
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         function: addVideoToQueue,
-        // Don't pass a specific video ID - find a video on the current page instead
-        args: []
+        // Use hardcoded video ID instead of finding one on the page
+        args: ['xuf1mcYuCaI'] // Hardcoded video ID from https://www.youtube.com/watch?v=xuf1mcYuCaI
       });
       
       const result = results[0].result;
@@ -108,25 +108,25 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 // This function will be injected into the page and executed
 function addVideoToQueue(videoId) {
-  console.log('%c[YouTube Queue Extension] Attempting to add video to queue', 'color: green; font-weight: bold', videoId || 'from current page');
+  console.log('%c[YouTube Queue Extension] Attempting to add video to queue', 'color: green; font-weight: bold', videoId);
   
   return new Promise(async (resolve) => {
     try {
-      // If no videoId is provided, try to find one
-      if (!videoId) {
-        console.log('[Queue Extension] No video ID provided, searching for one...');
-        videoId = await findTopVideoId();
-        
-        if (!videoId) {
-          console.error('[Queue Extension] Failed to find video ID');
-          resolve({
-            success: false,
-            error: 'Failed to find video ID',
-            videoId: null
-          });
-          return;
-        }
-      }
+      // Using hardcoded video ID instead of finding one
+      // if (!videoId) {
+      //   console.log('[Queue Extension] No video ID provided, searching for one...');
+      //   videoId = await findTopVideoId();
+      //   
+      //   if (!videoId) {
+      //     console.error('[Queue Extension] Failed to find video ID');
+      //     resolve({
+      //       success: false,
+      //       error: 'Failed to find video ID',
+      //       videoId: null
+      //     });
+      //     return;
+      //   }
+      // }
       
       console.log('[Queue Extension] Using video ID:', videoId);
       
@@ -151,200 +151,190 @@ function addVideoToQueue(videoId) {
       try {
         console.log('[Queue Extension] Trying YouTube playlist/create API');
         
-        // Get required API information from YouTube's config
-        const apiKey = window.ytcfg && window.ytcfg.get ? window.ytcfg.get('INNERTUBE_API_KEY') : null;
-        const clientVersion = window.ytcfg && window.ytcfg.get ? window.ytcfg.get('INNERTUBE_CLIENT_VERSION') : null;
-        const visitorData = window.ytcfg && window.ytcfg.get ? window.ytcfg.get('VISITOR_DATA') : null;
+        // HARDCODED VALUES from the YouTube-Internal-Clients information
+        // Using WEB client (ID: 1) with known API key
+        const apiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8'; // YouTube Web API key
+        const clientVersion = '2.20220918'; // Known working version
+        const clientName = 'WEB';
+        const visitorData = null; // This will be fetched from cookies if needed
         
-        // Check if we have the necessary data to make the API request
-        if (apiKey && clientVersion) {
-          console.log('[Queue Extension] Found YouTube API key and client version');
+        console.log('[Queue Extension] Using hardcoded YouTube API key and client version:', {
+          apiKey: apiKey,
+          clientName: clientName,
+          clientVersion: clientVersion
+        });
+        
+        // Try to get visitor data from cookies if available
+        let cookieData = {};
+        try {
+          if (document.cookie) {
+            document.cookie.split(';').forEach(cookie => {
+              const parts = cookie.trim().split('=');
+              if (parts.length === 2) {
+                cookieData[parts[0]] = parts[1];
+              }
+            });
+            console.log('[Queue Extension] Extracted cookie data:', cookieData);
+          }
+        } catch (cookieError) {
+          console.error('[Queue Extension] Error extracting cookies:', cookieError);
+        }
+        
+        // Collect basic client information for the request
+        const context = {
+          client: {
+            clientName: clientName,
+            clientVersion: clientVersion,
+            hl: document.documentElement.lang || "en",
+            gl: "US",
+            userAgent: navigator.userAgent
+          }
+        };
+        
+        // Build the request payload based on the example
+        const payload = {
+          context: context,
+          title: "Queue",
+          videoIds: [videoId],
+          params: "CAQ=" // Base64 encoded value for queue operation
+        };
+        
+        // Log the request we're about to make
+        console.log('[Queue Extension] Making YouTube playlist/create request:', {
+          url: `/youtubei/v1/playlist/create?key=${apiKey}`,
+          payload: payload
+        });
+        
+        // Make the request to YouTube's API
+        const response = await fetch(`https://www.youtube.com/youtubei/v1/playlist/create?key=${apiKey}`, {
+          method: 'POST',
+          credentials: 'include', // Important for sending cookies with the request
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Youtube-Client-Name': '1', // Client ID
+            'X-Youtube-Client-Version': clientVersion
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        // Parse and log the response
+        const responseData = await response.json();
+        console.log('[Queue Extension] YouTube API response:', responseData);
+        
+        // Check if the request was successful
+        if (response.ok) {
+          success = true;
+          method = 'youtube_api_direct';
+          console.log('[Queue Extension] Successfully added to queue via YouTube API');
+        } else {
+          console.error('[Queue Extension] YouTube API returned an error:', response.status, responseData);
+        }
+        
+        // If first API attempt failed, try with WEB_EMBEDDED_PLAYER client (ID: 56)
+        if (!success) {
+          console.log('[Queue Extension] Trying with WEB_EMBEDDED_PLAYER client');
           
-          // Collect basic client information for the request
-          const context = {
+          const embeddedContext = {
             client: {
-              clientName: "WEB",
-              clientVersion: clientVersion,
+              clientName: "WEB_EMBEDDED_PLAYER",
+              clientVersion: "9.20220918",
               hl: document.documentElement.lang || "en",
               gl: "US",
-              visitorData: visitorData,
               userAgent: navigator.userAgent
+            },
+            thirdParty: {
+              embedUrl: window.location.href
             }
           };
           
-          // Build the request payload based on the example
-          const payload = {
-            context: context,
+          const embeddedPayload = {
+            context: embeddedContext,
             title: "Queue",
             videoIds: [videoId],
-            params: "CAQ=" // Base64 encoded value for queue operation
+            params: "CAQ="
           };
           
-          // Log the request we're about to make
-          console.log('[Queue Extension] Making YouTube playlist/create request:', {
+          console.log('[Queue Extension] Making second playlist/create request with embedded player client:', {
             url: `/youtubei/v1/playlist/create?key=${apiKey}`,
-            payload: payload
+            payload: embeddedPayload
           });
           
-          // Make the request to YouTube's API
-          const response = await fetch(`https://www.youtube.com/youtubei/v1/playlist/create?key=${apiKey}`, {
+          const embeddedResponse = await fetch(`https://www.youtube.com/youtubei/v1/playlist/create?key=${apiKey}`, {
             method: 'POST',
-            credentials: 'include', // Important for sending cookies with the request
+            credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
-              'X-Youtube-Client-Name': '1',
-              'X-Youtube-Client-Version': clientVersion
+              'X-Youtube-Client-Name': '56', // WEB_EMBEDDED_PLAYER client ID
+              'X-Youtube-Client-Version': '9.20220918'
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(embeddedPayload)
           });
           
-          // Parse and log the response
-          const responseData = await response.json();
-          console.log('[Queue Extension] YouTube API response:', responseData);
+          const embeddedResponseData = await embeddedResponse.json();
+          console.log('[Queue Extension] Second API response:', embeddedResponseData);
           
-          // Check if the request was successful
-          if (response.ok) {
+          if (embeddedResponse.ok) {
             success = true;
-            method = 'youtube_api_direct';
-            console.log('[Queue Extension] Successfully added to queue via YouTube API');
+            method = 'youtube_api_embedded';
+            console.log('[Queue Extension] Successfully added to queue via embedded player API');
           } else {
-            console.error('[Queue Extension] YouTube API returned an error:', response.status, responseData);
+            console.error('[Queue Extension] Embedded player API returned an error:', embeddedResponse.status, embeddedResponseData);
           }
-        } else {
-          console.warn('[Queue Extension] Could not find YouTube API key or client version');
+        }
+        
+        // Last attempt with TVHTML5_SIMPLY_EMBEDDED_PLAYER (ID: 85) - has no age restrictions
+        if (!success) {
+          console.log('[Queue Extension] Trying with TVHTML5_SIMPLY_EMBEDDED_PLAYER client (no age restrictions)');
+          
+          const tvContext = {
+            client: {
+              clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+              clientVersion: "2.0",
+              hl: document.documentElement.lang || "en",
+              gl: "US",
+              userAgent: navigator.userAgent
+            },
+            thirdParty: {
+              embedUrl: window.location.href
+            }
+          };
+          
+          const tvPayload = {
+            context: tvContext,
+            title: "Queue",
+            videoIds: [videoId],
+            params: "CAQ="
+          };
+          
+          console.log('[Queue Extension] Making third playlist/create request with TV player client:', {
+            url: `/youtubei/v1/playlist/create?key=${apiKey}`,
+            payload: tvPayload
+          });
+          
+          const tvResponse = await fetch(`https://www.youtube.com/youtubei/v1/playlist/create?key=${apiKey}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Youtube-Client-Name': '85', // TVHTML5_SIMPLY_EMBEDDED_PLAYER client ID
+              'X-Youtube-Client-Version': '2.0'
+            },
+            body: JSON.stringify(tvPayload)
+          });
+          
+          const tvResponseData = await tvResponse.json();
+          console.log('[Queue Extension] Third API response:', tvResponseData);
+          
+          if (tvResponse.ok) {
+            success = true;
+            method = 'youtube_api_tv';
+            console.log('[Queue Extension] Successfully added to queue via TV player API');
+          } else {
+            console.error('[Queue Extension] TV player API returned an error:', tvResponse.status, tvResponseData);
+          }
         }
       } catch (apiError) {
         console.error('[Queue Extension] YouTube API error:', apiError);
-      }
-      
-      // FALLBACK METHOD 1: Click the "Add to queue" option in the video menu
-      if (!success) {
-        try {
-          console.log('[Queue Extension] Trying to find video and click "Add to queue"');
-          
-          // Find this video on the page
-          const videoElements = Array.from(document.querySelectorAll('ytd-thumbnail, a'))
-            .filter(el => {
-              const href = el.href || (el.querySelector('a') ? el.querySelector('a').href : '');
-              return href && href.includes(`/watch?v=${videoId}`);
-            });
-          
-          // If this video isn't on the page, try finding any video
-          if (videoElements.length === 0) {
-            const newVideoId = await findTopVideoId();
-            if (newVideoId && newVideoId !== videoId) {
-              videoId = newVideoId;
-              console.log('[Queue Extension] Using video ID from page instead:', videoId);
-            }
-          }
-          
-          // Try to find the video again with the possibly new ID
-          const updatedVideoElements = Array.from(document.querySelectorAll('ytd-thumbnail, a'))
-            .filter(el => {
-              const href = el.href || (el.querySelector('a') ? el.querySelector('a').href : '');
-              return href && href.includes(`/watch?v=${videoId}`);
-            });
-          
-          console.log(`[Queue Extension] Found ${updatedVideoElements.length} videos with ID ${videoId}`);
-          
-          // For each video found, try to click its menu and find "Add to queue"
-          for (const element of updatedVideoElements) {
-            // Find the video container
-            const container = element.closest('ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-video-renderer');
-            
-            if (container) {
-              // Look for the menu button
-              const menuButton = container.querySelector('button.yt-icon-button, ytd-menu-renderer button, [aria-label="Action menu"]');
-              
-              if (menuButton) {
-                console.log('[Queue Extension] Found menu button, clicking it');
-                menuButton.click();
-                
-                // Wait for menu to appear
-                await new Promise(r => setTimeout(r, 300));
-                
-                // Look for "Add to queue" option
-                const menuItems = document.querySelectorAll('ytd-menu-service-item-renderer, tp-yt-paper-item');
-                for (const item of menuItems) {
-                  const text = item.textContent || item.innerText || '';
-                  if (text.toLowerCase().includes('queue')) {
-                    console.log('[Queue Extension] Found "Add to queue" option, clicking it');
-                    item.click();
-                    success = true;
-                    method = 'menu_click';
-                    break;
-                  }
-                }
-                
-                // If we didn't find or click the queue option, close the menu
-                if (!success) {
-                  document.body.click();
-                }
-              }
-            }
-            
-            if (success) break;
-          }
-        } catch (menuError) {
-          console.error('[Queue Extension] Menu click error:', menuError);
-        }
-      }
-      
-      // FALLBACK METHOD 2: Use player API (if on watch page)
-      if (!success && window.location.href.includes('/watch')) {
-        try {
-          console.log('[Queue Extension] Trying player API on watch page');
-          
-          const player = document.querySelector('#movie_player');
-          if (player && (typeof player.cueVideoById === 'function' || typeof player.loadVideoById === 'function')) {
-            if (typeof player.cueVideoById === 'function') {
-              player.cueVideoById(videoId);
-              console.log('[Queue Extension] Called player.cueVideoById');
-            } else {
-              player.loadVideoById(videoId);
-              console.log('[Queue Extension] Called player.loadVideoById');
-            }
-            
-            success = true;
-            method = 'player_api';
-          }
-        } catch (playerError) {
-          console.error('[Queue Extension] Player API error:', playerError);
-        }
-      }
-      
-      // FALLBACK METHOD 3: URL modification approach
-      if (!success) {
-        try {
-          console.log('[Queue Extension] Trying URL modification approach');
-          
-          // Save current URL
-          const currentUrl = window.location.href;
-          
-          // Create queue URL
-          const queueUrl = `https://www.youtube.com/watch?v=${videoId}&playnext=1`;
-          
-          // Use history API to modify URL without page reload
-          history.pushState(null, '', queueUrl);
-          console.log('[Queue Extension] Changed URL to:', queueUrl);
-          
-          // Dispatch navigation events
-          window.dispatchEvent(new Event('popstate'));
-          document.dispatchEvent(new CustomEvent('yt-navigate-finish', {
-            detail: { watchEndpoint: { videoId: videoId } }
-          }));
-          
-          // Give YouTube a moment to process
-          await new Promise(r => setTimeout(r, 750));
-          
-          // Return to original URL
-          history.pushState(null, '', currentUrl);
-          
-          success = true;
-          method = 'url_modification';
-        } catch (urlError) {
-          console.error('[Queue Extension] URL modification error:', urlError);
-        }
       }
       
       // Update notification to show result
@@ -402,6 +392,8 @@ function addVideoToQueue(videoId) {
   });
   
   // Helper function to find the video ID of the first video on the page
+  // Commented out as we're using a hardcoded video ID instead
+  /*
   async function findTopVideoId() {
     console.log('[Queue Extension] Searching for top video ID');
     
@@ -523,6 +515,7 @@ function addVideoToQueue(videoId) {
     console.log('[Queue Extension] Could not find video ID');
     return null;
   }
+  */
 }
 
 // Handle any service worker initialization for Manifest V3

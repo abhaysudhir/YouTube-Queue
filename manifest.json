@@ -5,7 +5,8 @@
   "description": "Clicks the top video on a YouTube page",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "background": {
     "service_worker": "background.js"

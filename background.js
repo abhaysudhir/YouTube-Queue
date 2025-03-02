@@ -287,6 +287,66 @@ function addVideoToQueue(videoId) {
             
             if (playerResponse.ok) {
               console.log('[Queue Extension] Player initialization successful');
+              
+              // STEP 3: Navigation Update after successful player initialization
+              try {
+                console.log('[Queue Extension] STEP 3: Starting Navigation Update...');
+                
+                // Build the navigation update payload
+                const navigationPayload = {
+                  context: context,
+                  videoId: videoId,
+                  autonavState: "STATE_OFF", // Disables autoplay
+                  playbackContext: {
+                    vis: 0, // Visibility state
+                    lactMilliseconds: "-1" // Last activity time
+                  }
+                };
+                
+                console.log('[Queue Extension] Making navigation update request:', {
+                  url: `/youtubei/v1/next?key=${apiKey}`,
+                  payload: navigationPayload
+                });
+                
+                // Make the navigation update request
+                const navigationResponse = await fetch(`https://www.youtube.com/youtubei/v1/next?key=${apiKey}`, {
+                  method: 'POST',
+                  credentials: 'include', // Important for sending cookies with the request
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Youtube-Client-Name': '1',
+                    'X-Youtube-Client-Version': clientVersion
+                  },
+                  body: JSON.stringify(navigationPayload)
+                });
+                
+                // Parse and log the response
+                const navigationResponseData = await navigationResponse.json();
+                console.log('[Queue Extension] Navigation update response:', navigationResponseData);
+                
+                if (navigationResponse.ok) {
+                  console.log('[Queue Extension] Navigation update successful');
+                  
+                  // Optionally, we can also dispatch an event to notify YouTube's frontend
+                  try {
+                    if (typeof window.ytcfg !== 'undefined') {
+                      console.log('[Queue Extension] Dispatching UI update event');
+                      document.dispatchEvent(new CustomEvent('yt-action', {
+                        detail: {
+                          actionName: 'yt-append-continuation',
+                          args: [{ videoId: videoId }]
+                        }
+                      }));
+                    }
+                  } catch (eventError) {
+                    console.error('[Queue Extension] Error dispatching event:', eventError);
+                  }
+                } else {
+                  console.error('[Queue Extension] Navigation update failed:', navigationResponse.status);
+                }
+              } catch (navigationError) {
+                console.error('[Queue Extension] Error during navigation update:', navigationError);
+              }
             } else {
               console.error('[Queue Extension] Player initialization failed:', playerResponse.status);
             }

@@ -226,6 +226,74 @@ function addVideoToQueue(videoId) {
           success = true;
           method = 'youtube_api_direct';
           console.log('[Queue Extension] Successfully added to queue via YouTube API');
+          
+          // STEP 2: Player Initialization after successful queue addition
+          try {
+            console.log('[Queue Extension] STEP 2: Starting Player Initialization...');
+            
+            // Try to extract SAPISIDHASH for authorization if possible
+            let authHeader = '';
+            try {
+              // Extract SAPISID from cookies
+              const sapisid = cookieData['SAPISID'] || 
+                             cookieData['__Secure-1PAPISID'] || 
+                             cookieData['__Secure-3PAPISID'];
+              
+              if (sapisid) {
+                // Generate SAPISIDHASH - simplified version without proper algorithm
+                // Normally would need to create a proper hash, but since we're using credentials: 'include',
+                // YouTube will use the existing cookies for auth
+                console.log('[Queue Extension] Found SAPISID cookie, can use for auth');
+              }
+            } catch (authError) {
+              console.error('[Queue Extension] Error extracting auth data:', authError);
+            }
+            
+            // Calculate current timestamp
+            const currentTime = Math.floor(Date.now() / 1000);
+            
+            // Build the player initialization payload
+            const playerPayload = {
+              context: context,
+              videoId: videoId,
+              playbackContext: {
+                contentPlaybackContext: {
+                  signatureTimestamp: 20145, // Critical for DRM
+                  referer: "https://www.youtube.com/"
+                }
+              }
+            };
+            
+            console.log('[Queue Extension] Making player initialization request:', {
+              url: `/youtubei/v1/player?key=${apiKey}`,
+              payload: playerPayload
+            });
+            
+            // Make the player initialization request
+            const playerResponse = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
+              method: 'POST',
+              credentials: 'include', // Important for sending cookies with the request
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Youtube-Client-Name': '1',
+                'X-Youtube-Client-Version': clientVersion
+              },
+              body: JSON.stringify(playerPayload)
+            });
+            
+            // Parse and log the response
+            const playerResponseData = await playerResponse.json();
+            console.log('[Queue Extension] Player initialization response:', playerResponseData);
+            
+            if (playerResponse.ok) {
+              console.log('[Queue Extension] Player initialization successful');
+            } else {
+              console.error('[Queue Extension] Player initialization failed:', playerResponse.status);
+            }
+            
+          } catch (playerInitError) {
+            console.error('[Queue Extension] Error during player initialization:', playerInitError);
+          }
         } else {
           console.error('[Queue Extension] YouTube API returned an error:', response.status, responseData);
         }
